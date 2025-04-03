@@ -1,6 +1,7 @@
+#!/usr/bin/env python
 # filepath: bot.py
 # Main bot file for Telegram bot with ChatGPT and DALL-E integration
-# Optimized for both local development and deployment on Render.com
+# Optimized for Python 3.13 and newer telegram-bot API
 
 import logging
 import os
@@ -13,9 +14,12 @@ from collections import defaultdict, deque
 from functools import wraps
 
 # Third-party imports
-from telegram import Update, ParseMode
-from telegram.ext import Updater, CommandHandler, MessageHandler, Filters, CallbackContext
-from telegram.ext import Dispatcher, CallbackQueryHandler
+from telegram import Update
+from telegram.constants import ParseMode
+from telegram.ext import (
+    Application, CommandHandler, MessageHandler, filters,
+    ContextTypes, CallbackQueryHandler, Defaults
+)
 import openai
 from dotenv import load_dotenv
 from flask import Flask, request, Response
@@ -69,13 +73,14 @@ WEBHOOK_PATH = os.getenv("WEBHOOK_PATH", str(uuid.uuid4()))
 if not all([AZURE_OPENAI_API_KEY, AZURE_OPENAI_ENDPOINT, TELEGRAM_BOT_TOKEN]):
     logger.critical(
         "Missing required environment variables. Please configure the .env file")
-    exit(1)
+    sys.exit(1)
 
 # Configure OpenAI for Azure
-openai.api_type = "azure"
-openai.api_key = AZURE_OPENAI_API_KEY
-openai.api_base = AZURE_OPENAI_ENDPOINT
-openai.api_version = AZURE_API_VERSION
+client = openai.AzureOpenAI(
+    api_key=AZURE_OPENAI_API_KEY,
+    azure_endpoint=AZURE_OPENAI_ENDPOINT,
+    api_version=AZURE_API_VERSION
+)
 
 # Structure to store token usage per user
 user_token_usage = defaultdict(int)
@@ -171,7 +176,7 @@ def load_user_data():
 
 def track_usage(func):
     @wraps(func)
-    def wrapper(update: Update, context: CallbackContext, *args, **kwargs):
+    async def wrapper(update: Update, context: ContextTypes.DEFAULT_TYPE, *args, **kwargs):
         user_id = update.effective_user.id
         username = update.effective_user.username or "Unknown"
 
@@ -179,7 +184,7 @@ def track_usage(func):
         if user_token_usage[user_id] >= MAX_TOKENS_PER_USER:
             logger.warning(
                 f"User {username} (ID: {user_id}) has exceeded their token limit")
-            update.message.reply_text(
+            await update.message.reply_text(
                 "You have reached your usage limit. Please try again later or contact the administrator."
             )
             return
@@ -189,7 +194,7 @@ def track_usage(func):
             f"Request from {username} (ID: {user_id}): {update.message.text}")
 
         # Execute the original function
-        return func(update, context, *args, **kwargs)
+        return await func(update, context, *args, **kwargs)
 
     return wrapper
 
@@ -199,12 +204,12 @@ def track_usage(func):
 def retry_on_error(max_retries=3, backoff_factor=1.5):
     def decorator(func):
         @wraps(func)
-        def wrapper(*args, **kwargs):
+        async def wrapper(*args, **kwargs):
             retries = 0
             delay = 1  # Start with 1 second delay
             while retries < max_retries:
                 try:
-                    return func(*args, **kwargs)
+                    return await func(*args, **kwargs)
                 except Exception as e:
                     retries += 1
                     logger.warning(
@@ -221,7 +226,7 @@ def retry_on_error(max_retries=3, backoff_factor=1.5):
     return decorator
 
 
-def start(update: Update, context: CallbackContext):
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handler for the /start command"""
     user_id = update.effective_user.id
     username = update.effective_user.username or "Unknown"
@@ -233,7 +238,7 @@ def start(update: Update, context: CallbackContext):
 
     model_names = [model_info["name"] for model_info in models.values()]
 
-    update.message.reply_text(
+    await update.message.reply_text(
         f"Hello {update.effective_user.first_name}! I'm a bot powered by ChatGPT. Send me a message and I'll respond.\n\n"
         "*Available commands:*\n"
         "/start - Show this help message\n"
@@ -249,11 +254,11 @@ def start(update: Update, context: CallbackContext):
 
 
 @track_usage
-def set_model(update: Update, context: CallbackContext):
+async def set_model(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handler for the /setmodel command"""
     if len(context.args) == 0:
         model_names = [model_info["name"] for model_info in models.values()]
-        update.message.reply_text(
+        await update.message.reply_text(
             "Please provide the model name.\n"
             f"Example: /setmodel gpt-4\n\n"
             f"Available models: {', '.join(model_names)}"
@@ -273,7 +278,7 @@ def set_model(update: Update, context: CallbackContext):
         context.user_data["model"] = model_key
         logger.info(
             f"User {update.effective_user.id} changed model from {old_model} to {model_key}")
-        update.message.reply_text(
+        await update.message.reply_text(
             f"✅ Model changed to *{models[model_key]['name']}*\n\n"
             f"*Approximate costs per 1K tokens:*\n"
             f"- Input: ${models[model_key]['input_cost']}\n"
@@ -282,7 +287,7 @@ def set_model(update: Update, context: CallbackContext):
         )
     else:
         model_names = [model_info["name"] for model_info in models.values()]
-        update.message.reply_text(
+        await update.message.reply_text(
             f"❌ Model not found.\n\n"
             f"*Available models:* {', '.join(model_names)}",
             parse_mode=ParseMode.MARKDOWN
@@ -291,10 +296,10 @@ def set_model(update: Update, context: CallbackContext):
 
 @track_usage
 @retry_on_error(max_retries=2, backoff_factor=2)
-def generate_image(update: Update, context: CallbackContext, size="1024x1024"):
+async def generate_image(update: Update, context: ContextTypes.DEFAULT_TYPE, size="1024x1024"):
     """Handler to generate images using DALL-E"""
     if len(context.args) == 0:
-        update.message.reply_text(
+        await update.message.reply_text(
             "Please provide a description for the image.\n"
             "Example: /generatehd A mountain landscape at sunset"
         )
@@ -308,12 +313,12 @@ def generate_image(update: Update, context: CallbackContext, size="1024x1024"):
 
     # Check prompt length
     if len(user_message) > 1000:
-        update.message.reply_text(
+        await update.message.reply_text(
             "The description is too long. Please limit it to 1000 characters.")
         return
 
     # Wait message with emoji for better UX
-    wait_message = update.message.reply_text(
+    wait_message = await update.message.reply_text(
         "🎨 Generating image... Please wait.")
 
     try:
@@ -328,19 +333,17 @@ def generate_image(update: Update, context: CallbackContext, size="1024x1024"):
 
             # For DALL-E in Azure, we need to use a different API call
             # This is specifically for Azure OpenAI's DALL-E implementation
-            response = openai.Image.create(
-                api_version="2023-06-01-preview",  # Specific version for DALL-E in Azure
+            response = client.images.generate(
                 prompt=user_message,
                 n=1,
                 size=size,
-                deployment_id=models["dall-e-3"]["deployment_id"]
+                model=models["dall-e-3"]["deployment_id"]
             )
 
             # Parse the response to get the image URL
-            # The structure might differ between Azure and standard OpenAI
-            if 'data' in response and len(response['data']) > 0:
-                if 'url' in response['data'][0]:
-                    image_url = response['data'][0]['url']
+            if hasattr(response, 'data') and len(response.data) > 0:
+                if hasattr(response.data[0], 'url'):
+                    image_url = response.data[0].url
                 else:
                     # Some versions return b64_json instead of url
                     image_url = "Image generated but URL not available. Check Azure portal."
@@ -364,8 +367,8 @@ def generate_image(update: Update, context: CallbackContext, size="1024x1024"):
         save_user_data()
 
         # Delete wait message and send the image
-        wait_message.delete()
-        update.message.reply_text(
+        await wait_message.delete()
+        await update.message.reply_text(
             f"✨ *Image generated successfully*\n\n"
             f"*Prompt:* {user_message}\n\n"
             f"[View image]({image_url})",
@@ -374,19 +377,19 @@ def generate_image(update: Update, context: CallbackContext, size="1024x1024"):
 
         logger.info(f"Image generated successfully for user {user_id}")
     except Exception as e:
-        wait_message.delete()
+        await wait_message.delete()
         error_message = str(e)
         logger.error(
             f"Error generating image for user {user_id}: {error_message}")
 
         # More detailed error message
         if "content policy violation" in error_message.lower():
-            update.message.reply_text(
+            await update.message.reply_text(
                 "❌ Could not generate the image because the requested content violates usage policies.\n"
                 "Please try with a different description."
             )
         else:
-            update.message.reply_text(
+            await update.message.reply_text(
                 f"❌ Sorry, an error occurred while generating the image.\n"
                 f"Error: {error_message[:100]}..."
             )
@@ -394,7 +397,7 @@ def generate_image(update: Update, context: CallbackContext, size="1024x1024"):
 
 @track_usage
 @retry_on_error(max_retries=2, backoff_factor=2)
-def chat(update: Update, context: CallbackContext):
+async def chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handler for processing chat messages and generating AI responses"""
     user_id = update.effective_user.id
     user_message = update.message.text
@@ -413,7 +416,7 @@ def chat(update: Update, context: CallbackContext):
         context.user_data["messages"] = context.user_data["messages"][-20:]
 
     # Wait message with typing indicator
-    wait_message = update.message.reply_text("💭 Thinking...")
+    wait_message = await update.message.reply_text("💭 Thinking...")
 
     try:
         # Check cache first
@@ -424,6 +427,7 @@ def chat(update: Update, context: CallbackContext):
             bot_reply = response_cache[cache_key]
             logger.info(f"Using cached response for user {user_id}")
             estimated_tokens = len(bot_reply) // 4
+            total_tokens = estimated_tokens  # For consistency with the non-cached path
         else:
             # Prepare messages for the API including conversation history
             messages = context.user_data["messages"]
@@ -434,16 +438,15 @@ def chat(update: Update, context: CallbackContext):
 
             # Check token limit
             if user_token_usage[user_id] + input_tokens > MAX_TOKENS_PER_USER:
-                wait_message.delete()
-                update.message.reply_text(
+                await wait_message.delete()
+                await update.message.reply_text(
                     "You have reached your usage limit. Please try again later or contact the administrator."
                 )
                 return
 
             # Call the API with Azure-specific parameters
-            response = openai.ChatCompletion.create(
-                # Use deployment_id for Azure
-                deployment_id=models[model_key]["deployment_id"],
+            response = client.chat.completions.create(
+                model=models[model_key]["deployment_id"],
                 messages=messages
             )
 
@@ -473,7 +476,7 @@ def chat(update: Update, context: CallbackContext):
             "user_message": user_message,
             "bot_reply": bot_reply,
             "model": model_key,
-            "tokens": total_tokens if 'total_tokens' in locals() else len(bot_reply) // 4,
+            "tokens": total_tokens,  # Now always defined
             "timestamp": timestamp
         })
 
@@ -481,11 +484,11 @@ def chat(update: Update, context: CallbackContext):
         save_user_data()
 
         # Delete wait message and send response
-        wait_message.delete()
-        update.message.reply_text(bot_reply)
+        await wait_message.delete()
+        await update.message.reply_text(bot_reply)
 
     except Exception as e:
-        wait_message.delete()
+        await wait_message.delete()
         error_message = str(e)
         logger.error(
             f"Error generating response for user {user_id}: {error_message}")
@@ -494,20 +497,21 @@ def chat(update: Update, context: CallbackContext):
         if "maximum context length" in error_message.lower():
             # Reset context if it's too long
             context.user_data["messages"] = context.user_data["messages"][-2:]
-            update.message.reply_text(
+            await update.message.reply_text(
                 "❌ The conversation is too long. I've reset the context.\n"
                 "Please try sending your message again."
             )
         else:
-            update.message.reply_text(
+            await update.message.reply_text(
                 f"❌ Sorry, an error occurred while generating the response.\n"
                 f"Error: {error_message[:100]}..."
             )
 
-
 # Command to show current usage
+
+
 @track_usage
-def show_usage(update: Update, context: CallbackContext):
+async def show_usage(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handler for the /usage command to display token usage statistics"""
     user_id = update.effective_user.id
     tokens_used = user_token_usage[user_id]
@@ -524,7 +528,7 @@ def show_usage(update: Update, context: CallbackContext):
     output_cost = (tokens_used / 2) * (model_info["output_cost"] / 1000)
     total_cost = input_cost + output_cost
 
-    update.message.reply_text(
+    await update.message.reply_text(
         f"📊 *Usage Statistics*\n\n"
         f"*Tokens used:* {tokens_used} of {MAX_TOKENS_PER_USER} ({percentage:.1f}%)\n"
         f"*Current model:* {model_info['name']}\n"
@@ -538,7 +542,7 @@ def show_usage(update: Update, context: CallbackContext):
 
 
 @track_usage
-def reset_conversation(update: Update, context: CallbackContext):
+async def reset_conversation(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handler for the /reset command to clear conversation history"""
     user_id = update.effective_user.id
 
@@ -555,22 +559,22 @@ def reset_conversation(update: Update, context: CallbackContext):
         # Reset the conversation
         context.user_data["messages"] = []
         logger.info(f"User {user_id} has reset their conversation")
-        update.message.reply_text(
+        await update.message.reply_text(
             "🔄 Conversation reset. Let's start fresh!")
 
         # Save updated user data
         save_user_data()
     else:
-        update.message.reply_text(
+        await update.message.reply_text(
             "There is no active conversation to reset.")
 
 # Detailed help command
 
 
 @track_usage
-def help_command(update: Update, context: CallbackContext):
+async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handler for the /help command with detailed usage information"""
-    update.message.reply_text(
+    await update.message.reply_text(
         "*🤖 Bot Usage Guide*\n\n"
         "*Available commands:*\n\n"
         "*/start* - Start the bot and show the welcome message\n"
@@ -593,60 +597,36 @@ def help_command(update: Update, context: CallbackContext):
         parse_mode=ParseMode.MARKDOWN
     )
 
-# Function to create Flask app (for Gunicorn)
 
+async def setup_webhook(app, bot):
+    """Set up the webhook for Telegram"""
+    webhook_url = f"{WEBHOOK_URL}/{WEBHOOK_PATH}"
+    await bot.set_webhook(url=webhook_url)
+    logger.info(f"Webhook set to {webhook_url}")
 
-def create_app():
-    """Create and configure the Flask application for webhook handling"""
-    global bot, dispatcher
-
-    # Initialize bot and dispatcher
-    bot = Updater(TELEGRAM_BOT_TOKEN).bot
-    dispatcher = setup_dispatcher()
-
-    # Set up the Flask app
-    app = Flask(__name__)
-
-    # Define webhook route with secure path
     @app.route(f'/{WEBHOOK_PATH}', methods=['POST'])
-    def webhook():
+    async def webhook():
         """Handle incoming updates from Telegram"""
         update = Update.de_json(request.get_json(force=True), bot)
-        dispatcher.process_update(update)
+        asyncio.create_task(application.process_update(update))
         return 'ok'
 
     @app.route('/')
-    def index():
+    async def index():
         """Health check endpoint"""
         return 'Bot is running!'
 
+
+def create_app():
+    """Create and configure Flask application for webhook handling"""
+    app = Flask(__name__)
+
+    # We'll set up the webhook routes later when the bot is running
+    # This function just returns the Flask app
     return app
 
 
-def setup_dispatcher():
-    """Setup and return the dispatcher with all handlers"""
-    dispatcher = Dispatcher(bot, None, workers=0)
-
-    # Register command handlers
-    dispatcher.add_handler(CommandHandler("start", start))
-    dispatcher.add_handler(CommandHandler("help", help_command))
-    dispatcher.add_handler(CommandHandler(
-        "setmodel", set_model, pass_args=True))
-    dispatcher.add_handler(CommandHandler(
-        "generatehd", generate_image, pass_args=True))
-    dispatcher.add_handler(CommandHandler("reset", reset_conversation))
-    dispatcher.add_handler(CommandHandler("usage", show_usage))
-    dispatcher.add_handler(MessageHandler(
-        Filters.text & ~Filters.command, chat))
-
-    # Register error handler
-    dispatcher.add_error_handler(lambda update, context: logger.error(
-        f"Error in update {update}: {context.error}"))
-
-    return dispatcher
-
-
-def main():
+async def main():
     """Main function to run the bot"""
     # Load saved user data if available
     load_user_data()
@@ -659,42 +639,47 @@ def main():
             "ERROR: Missing required environment variables. Please configure the .env file")
         return
 
-    global bot, dispatcher
-
     try:
         logger.info("Starting the bot...")
-        bot = Updater(TELEGRAM_BOT_TOKEN).bot
-        dispatcher = setup_dispatcher()
+
+        # Create the Application and pass it your bot's token.
+        application = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
+
+        # Register handlers
+        application.add_handler(CommandHandler("start", start))
+        application.add_handler(CommandHandler("help", help_command))
+        application.add_handler(CommandHandler(
+            "setmodel", set_model))
+        application.add_handler(CommandHandler(
+            "generatehd", generate_image))
+        application.add_handler(CommandHandler("reset", reset_conversation))
+        application.add_handler(CommandHandler("usage", show_usage))
+        application.add_handler(MessageHandler(
+            filters.TEXT & ~filters.COMMAND, chat))
 
         # Choose between webhook (production) and polling (development)
         if IS_PRODUCTION and WEBHOOK_URL:
             # Production mode: use webhook
             logger.info(f"Starting webhook on port {PORT}")
 
-            # Set webhook with secure path
-            webhook_url = f"{WEBHOOK_URL}/{WEBHOOK_PATH}"
-            bot.set_webhook(url=webhook_url)
-            logger.info(f"Webhook set to {webhook_url}")
-
-            # Start Flask server
-            logger.info("Bot started successfully in webhook mode")
+            # Using webhooks with the new API
             app = create_app()
-            app.run(host='0.0.0.0', port=PORT)
+            await setup_webhook(app, application.bot)
+
+            # Return the app to be run by gunicorn
+            return app
         else:
             # Development mode: use polling
             logger.info("Starting polling")
-            updater = Updater(TELEGRAM_BOT_TOKEN)
-            updater.dispatcher = dispatcher
 
-            # Start the Bot in polling mode
-            logger.info("Bot started successfully in polling mode")
-            print("Bot started successfully. Press Ctrl+C to stop.")
-            updater.start_polling()
-            updater.idle()
+            # Start the Bot using polling (this will block until Ctrl-C)
+            await application.run_polling(allowed_updates=Update.ALL_TYPES)
+
     except Exception as e:
         logger.critical(f"Error starting the bot: {e}")
         print(f"ERROR: Could not start the bot: {e}")
-
+        return None
 
 if __name__ == "__main__":
-    main()
+    import asyncio
+    asyncio.run(main())
