@@ -9,6 +9,7 @@ import time
 import json
 import sys
 import uuid
+import asyncio
 from datetime import datetime
 from collections import defaultdict, deque
 from functools import wraps
@@ -296,8 +297,10 @@ async def set_model(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 @track_usage
 @retry_on_error(max_retries=2, backoff_factor=2)
-async def generate_image(update: Update, context: ContextTypes.DEFAULT_TYPE, size="1024x1024"):
+async def generate_image(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handler to generate images using DALL-E"""
+    size = "1024x1024"  # Default size
+
     if len(context.args) == 0:
         await update.message.reply_text(
             "Please provide a description for the image.\n"
@@ -598,88 +601,109 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 
-async def setup_webhook(app, bot):
-    """Set up the webhook for Telegram"""
-    webhook_url = f"{WEBHOOK_URL}/{WEBHOOK_PATH}"
-    await bot.set_webhook(url=webhook_url)
-    logger.info(f"Webhook set to {webhook_url}")
+# Create a webhook handler for Flask
+def create_flask_app(application):
+    """Create Flask app with webhook handlers"""
+    app = Flask(__name__)
 
     @app.route(f'/{WEBHOOK_PATH}', methods=['POST'])
-    async def webhook():
-        """Handle incoming updates from Telegram"""
-        update = Update.de_json(request.get_json(force=True), bot)
-        asyncio.create_task(application.process_update(update))
+    def webhook():
+        """Handle incoming webhook updates from Telegram"""
+        # Get the update from Telegram
+        update_json = request.get_json(force=True)
+
+        # Process the update in an async context
+        async def process_update():
+            update = Update.de_json(update_json, application.bot)
+            await application.process_update(update)
+
+        # Run the async function
+        asyncio.run(process_update())
         return 'ok'
 
     @app.route('/')
-    async def index():
+    def index():
         """Health check endpoint"""
         return 'Bot is running!'
 
-
-def create_app():
-    """Create and configure Flask application for webhook handling"""
-    app = Flask(__name__)
-
-    # We'll set up the webhook routes later when the bot is running
-    # This function just returns the Flask app
     return app
 
 
-async def main():
-    """Main function to run the bot"""
-    # Load saved user data if available
+def create_app():
+    """Create the Flask app and configure it for production use with webhooks"""
+    # Load saved user data
     load_user_data()
 
-    # Verify that API keys are configured
-    if not all([AZURE_OPENAI_API_KEY, AZURE_OPENAI_ENDPOINT, TELEGRAM_BOT_TOKEN]):
-        logger.critical(
-            "Missing required environment variables. Please configure the .env file")
-        print(
-            "ERROR: Missing required environment variables. Please configure the .env file")
-        return
+    # Create the Application and pass it your bot's token
+    application = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
 
+    # Register handlers
+    application.add_handler(CommandHandler("start", start))
+    application.add_handler(CommandHandler("help", help_command))
+    application.add_handler(CommandHandler("setmodel", set_model))
+    application.add_handler(CommandHandler("generatehd", generate_image))
+    application.add_handler(CommandHandler("reset", reset_conversation))
+    application.add_handler(CommandHandler("usage", show_usage))
+    application.add_handler(MessageHandler(
+        filters.TEXT & ~filters.COMMAND, chat))
+
+    # Set the webhook for production mode
+    if IS_PRODUCTION and WEBHOOK_URL:
+        webhook_url = f"{WEBHOOK_URL}/{WEBHOOK_PATH}"
+
+        # This sets the webhook in an async context which is required
+        async def set_webhook():
+            await application.bot.set_webhook(url=webhook_url)
+            logger.info(f"Webhook set to {webhook_url}")
+
+        # Run the async function to set webhook
+        asyncio.run(set_webhook())
+
+    # Create and return Flask app
+    return create_flask_app(application)
+
+
+async def run_polling():
+    """Run the bot in polling mode (for local development)"""
+    # Load saved user data
+    load_user_data()
+
+    # Create the Application and pass it your bot's token
+    application = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
+
+    # Register handlers
+    application.add_handler(CommandHandler("start", start))
+    application.add_handler(CommandHandler("help", help_command))
+    application.add_handler(CommandHandler("setmodel", set_model))
+    application.add_handler(CommandHandler("generatehd", generate_image))
+    application.add_handler(CommandHandler("reset", reset_conversation))
+    application.add_handler(CommandHandler("usage", show_usage))
+    application.add_handler(MessageHandler(
+        filters.TEXT & ~filters.COMMAND, chat))
+
+    # Remove webhook if previously set
+    await application.bot.delete_webhook()
+    logger.info("Webhook deleted, starting polling")
+
+    # Start the Bot using polling (this will block until Ctrl-C)
+    await application.run_polling(allowed_updates=Update.ALL_TYPES)
+
+
+if __name__ == "__main__":
     try:
         logger.info("Starting the bot...")
 
-        # Create the Application and pass it your bot's token.
-        application = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
-
-        # Register handlers
-        application.add_handler(CommandHandler("start", start))
-        application.add_handler(CommandHandler("help", help_command))
-        application.add_handler(CommandHandler(
-            "setmodel", set_model))
-        application.add_handler(CommandHandler(
-            "generatehd", generate_image))
-        application.add_handler(CommandHandler("reset", reset_conversation))
-        application.add_handler(CommandHandler("usage", show_usage))
-        application.add_handler(MessageHandler(
-            filters.TEXT & ~filters.COMMAND, chat))
-
-        # Choose between webhook (production) and polling (development)
+        # Choose between webhook (production) or polling (development)
         if IS_PRODUCTION and WEBHOOK_URL:
-            # Production mode: use webhook
-            logger.info(f"Starting webhook on port {PORT}")
-
-            # Using webhooks with the new API
-            app = create_app()
-            await setup_webhook(app, application.bot)
-
-            # Return the app to be run by gunicorn
-            return app
+            # In production, we don't run the app directly, gunicorn does
+            # The function create_app() will be called by gunicorn
+            logger.info(f"Configured for webhook deployment on port {PORT}")
         else:
-            # Development mode: use polling
-            logger.info("Starting polling")
-
-            # Start the Bot using polling (this will block until Ctrl-C)
-            await application.run_polling(allowed_updates=Update.ALL_TYPES)
+            # In development mode, run polling
+            logger.info("Starting in polling mode (development)")
+            asyncio.run(run_polling())
 
     except Exception as e:
         logger.critical(f"Error starting the bot: {e}")
         print(f"ERROR: Could not start the bot: {e}")
-        return None
-
-if __name__ == "__main__":
-    import asyncio
-    asyncio.run(main())
+        sys.exit(1)
