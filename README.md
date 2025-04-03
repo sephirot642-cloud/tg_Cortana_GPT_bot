@@ -1,114 +1,114 @@
-# Bot de Telegram con ChatGPT y DALL-E
+# Telegram Bot with ChatGPT and DALL-E
 
-Este bot de Telegram integra las capacidades de ChatGPT y DALL-E para proporcionar respuestas de texto e imágenes generadas por IA.
+This Telegram bot integrates ChatGPT and DALL-E capabilities to provide AI-generated text and image responses.
 
-## Características
+## Features
 
-- 💬 **Chat con memoria**: Mantiene el contexto de la conversación para respuestas más coherentes
-- 🖼️ **Generación de imágenes**: Crea imágenes en alta definición con DALL-E 3
-- 🔄 **Múltiples modelos**: Soporte para varios modelos de OpenAI (GPT-4, GPT-3.5, etc.)
-- 📊 **Control de uso**: Seguimiento del uso de tokens por usuario
-- 🔒 **Límites configurables**: Establece límites de uso para controlar costos
-- 📝 **Logging detallado**: Registro completo de actividades para monitoreo
-- 🔁 **Reintentos automáticos**: Manejo de errores con reintentos para mayor robustez
+- 💬 **Chat with memory**: Maintains conversation context for more coherent responses
+- 🖼️ **Image generation**: Creates high-definition images with DALL-E 3
+- 🔄 **Multiple models**: Support for various OpenAI models (GPT-4, GPT-3.5, etc.)
+- 📊 **Usage control**: Tracks token usage per user
+- 🔒 **Configurable limits**: Set usage limits to control costs
+- 📝 **Detailed logging**: Complete activity logs for monitoring
+- 🔁 **Automatic retries**: Error handling with retries for increased robustness
 
-## Requisitos
+## Requirements
 
-- Python 3.7 o superior
-- Una cuenta en Azure OpenAI o OpenAI
-- Un token de bot de Telegram (obtenido a través de [@BotFather](https://t.me/BotFather))
+- Python 3.7 or higher
+- An account with Azure OpenAI or OpenAI
+- A Telegram bot token (obtained via [@BotFather](https://t.me/BotFather))
 
-## Instalación
+## Installation
 
-### Instalación Local
+### Local Installation
 
-1. Clona este repositorio o descarga los archivos
+1. Clone this repository or download the files
 
-2. Instala las dependencias:
+2. Install dependencies:
 
 ```bash
 pip install -r requirements.txt
 ```
 
-3. Configura el archivo `.env` con tus credenciales:
+3. Configure the `.env` file with your credentials:
 
 ```
-AZURE_OPENAI_API_KEY=tu_clave_api_aqui
-AZURE_OPENAI_ENDPOINT=tu_endpoint_aqui
-TELEGRAM_BOT_TOKEN=tu_token_de_telegram_aqui
+AZURE_OPENAI_API_KEY=your_api_key_here
+AZURE_OPENAI_ENDPOINT=your_endpoint_here
+TELEGRAM_BOT_TOKEN=your_telegram_token_here
 
-# Configuración opcional
+# Optional configuration
 MAX_TOKENS_PER_USER=1000
 MAX_CONVERSATIONS_STORED=10
 LOG_LEVEL=INFO
 ```
 
-### Despliegue en Render.com
+### Deployment on Render.com
 
-1. Crea una cuenta en [Render.com](https://render.com) si aún no tienes una
+1. Create an account on [Render.com](https://render.com) if you don't have one yet
 
-2. Haz clic en "New" y selecciona "Web Service"
+2. Click on "New" and select "Web Service"
 
-3. Conecta tu repositorio de GitHub o sube los archivos manualmente
+3. Connect your GitHub repository or upload the files manually
 
-4. Configura el servicio con los siguientes parámetros:
-   - **Name**: Nombre de tu bot
+4. Configure the service with the following parameters:
+   - **Name**: Your bot's name
    - **Environment**: Python
    - **Build Command**: `pip install -r requirements.txt`
    - **Start Command**: `gunicorn bot:app`
 
-5. En la sección "Environment Variables", añade las siguientes variables:
+5. In the "Environment Variables" section, add the following variables:
 
 ```
-AZURE_OPENAI_API_KEY=tu_clave_api_aqui
-AZURE_OPENAI_ENDPOINT=tu_endpoint_aqui
-TELEGRAM_BOT_TOKEN=tu_token_de_telegram_aqui
+AZURE_OPENAI_API_KEY=your_api_key_here
+AZURE_OPENAI_ENDPOINT=your_endpoint_here
+TELEGRAM_BOT_TOKEN=your_telegram_token_here
 RENDER=true
-WEBHOOK_URL=https://tu-app-name.onrender.com
+WEBHOOK_URL=https://your-app-name.onrender.com
 ```
 
-6. Haz clic en "Create Web Service"
+6. Click on "Create Web Service"
 
-7. Una vez desplegado, configura el webhook de Telegram visitando:
-   `https://api.telegram.org/bot<TELEGRAM_BOT_TOKEN>/setWebhook?url=https://tu-app-name.onrender.com/<TELEGRAM_BOT_TOKEN>`
+7. Once deployed, set up the Telegram webhook by visiting:
+   `https://api.telegram.org/bot<TELEGRAM_BOT_TOKEN>/setWebhook?url=https://your-app-name.onrender.com/<TELEGRAM_BOT_TOKEN>`
 
-## Uso
+## Usage
 
-1. Inicia el bot:
+1. Start the bot:
 
 ```bash
 python bot.py
 ```
 
-2. Abre Telegram y busca tu bot por su nombre de usuario
+2. Open Telegram and search for your bot by its username
 
-3. Inicia una conversación con el comando `/start`
+3. Start a conversation with the `/start` command
 
-## Comandos disponibles
+## Available Commands
 
-- `/start` - Inicia el bot y muestra el mensaje de bienvenida
-- `/help` - Muestra una guía de ayuda detallada
-- `/setmodel <nombre>` - Cambia el modelo de IA a utilizar
-- `/generatehd <descripción>` - Genera una imagen en alta definición (1920x1080)
-- `/reset` - Reinicia la conversación actual, eliminando el contexto
-- `/usage` - Muestra estadísticas de tu uso actual
+- `/start` - Starts the bot and shows the welcome message
+- `/help` - Shows a detailed help guide
+- `/setmodel <name>` - Changes the AI model to use
+- `/generatehd <description>` - Generates a high-definition image (1920x1080)
+- `/reset` - Resets the current conversation, removing the context
+- `/usage` - Shows your current usage statistics
 
-## Personalización
+## Customization
 
-Puedes modificar los siguientes parámetros en el archivo `.env`:
+You can modify the following parameters in the `.env` file:
 
-- `MAX_TOKENS_PER_USER`: Límite de tokens por usuario
-- `MAX_CONVERSATIONS_STORED`: Número máximo de conversaciones almacenadas
-- `LOG_LEVEL`: Nivel de detalle de los logs (DEBUG, INFO, WARNING, ERROR, CRITICAL)
+- `MAX_TOKENS_PER_USER`: Token limit per user
+- `MAX_CONVERSATIONS_STORED`: Maximum number of stored conversations
+- `LOG_LEVEL`: Log detail level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
 
-## Solución de problemas
+## Troubleshooting
 
-- Si el bot no responde, verifica que las credenciales en el archivo `.env` sean correctas
-- Revisa los logs en `bot.log` para identificar posibles errores
-- Asegúrate de tener suficientes créditos en tu cuenta de OpenAI
-- Para problemas en Render.com, verifica los logs del servicio en el dashboard de Render
-- Si el webhook no funciona, asegúrate de que la URL sea accesible públicamente
+- If the bot doesn't respond, check that the credentials in the `.env` file are correct
+- Check the logs in `bot.log` to identify possible errors
+- Make sure you have enough credits in your OpenAI account
+- For issues on Render.com, check the service logs in the Render dashboard
+- If the webhook doesn't work, ensure the URL is publicly accessible
 
-## Licencia
+## License
 
-Este proyecto está disponible bajo la licencia MIT.
+This project is available under the MIT license.

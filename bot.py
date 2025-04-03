@@ -37,7 +37,7 @@ if os.getenv("RENDER") != "true":
     log_handlers.append(logging.FileHandler("bot.log"))
 
 logging.basicConfig(
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', 
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     level=log_level_dict.get(log_level, logging.INFO),
     handlers=log_handlers
 )
@@ -62,7 +62,8 @@ app = Flask(__name__)
 
 # Verificar que las variables de entorno necesarias estén configuradas
 if not all([AZURE_OPENAI_API_KEY, AZURE_OPENAI_ENDPOINT, TELEGRAM_BOT_TOKEN]):
-    logger.critical("Faltan variables de entorno necesarias. Por favor, configura el archivo .env")
+    logger.critical(
+        "Faltan variables de entorno necesarias. Por favor, configura el archivo .env")
     exit(1)
 
 openai.api_key = AZURE_OPENAI_API_KEY
@@ -72,7 +73,8 @@ openai.api_base = AZURE_OPENAI_ENDPOINT
 user_token_usage = defaultdict(int)
 
 # Estructura para almacenar conversaciones por usuario
-user_conversations = defaultdict(lambda: deque(maxlen=MAX_CONVERSATIONS_STORED))
+user_conversations = defaultdict(
+    lambda: deque(maxlen=MAX_CONVERSATIONS_STORED))
 
 # Diccionario de modelos disponibles con sus costos aproximados por 1K tokens
 models = {
@@ -86,29 +88,35 @@ models = {
 }
 
 # Decorador para registrar el uso y verificar límites
+
+
 def track_usage(func):
     @wraps(func)
     def wrapper(update: Update, context: CallbackContext, *args, **kwargs):
         user_id = update.effective_user.id
         username = update.effective_user.username or "Unknown"
-        
+
         # Verificar si el usuario ha excedido su límite
         if user_token_usage[user_id] >= MAX_TOKENS_PER_USER:
-            logger.warning(f"Usuario {username} (ID: {user_id}) ha excedido su límite de tokens")
+            logger.warning(
+                f"Usuario {username} (ID: {user_id}) ha excedido su límite de tokens")
             update.message.reply_text(
                 "Has alcanzado tu límite de uso. Por favor, intenta más tarde o contacta al administrador."
             )
             return
-        
+
         # Registrar la solicitud
-        logger.info(f"Solicitud de {username} (ID: {user_id}): {update.message.text}")
-        
+        logger.info(
+            f"Solicitud de {username} (ID: {user_id}): {update.message.text}")
+
         # Ejecutar la función original
         return func(update, context, *args, **kwargs)
-    
+
     return wrapper
 
 # Función para reintentar en caso de error
+
+
 def retry_on_error(max_retries=3, delay=2):
     def decorator(func):
         @wraps(func)
@@ -119,9 +127,11 @@ def retry_on_error(max_retries=3, delay=2):
                     return func(*args, **kwargs)
                 except Exception as e:
                     retries += 1
-                    logger.warning(f"Intento {retries}/{max_retries} falló: {e}")
+                    logger.warning(
+                        f"Intento {retries}/{max_retries} falló: {e}")
                     if retries >= max_retries:
-                        logger.error(f"Error después de {max_retries} intentos: {e}")
+                        logger.error(
+                            f"Error después de {max_retries} intentos: {e}")
                         raise
                     time.sleep(delay)
             return None
@@ -133,13 +143,13 @@ def start(update: Update, context: CallbackContext):
     user_id = update.effective_user.id
     username = update.effective_user.username or "Unknown"
     logger.info(f"Usuario {username} (ID: {user_id}) ha iniciado el bot")
-    
+
     # Inicializar datos del usuario si es la primera vez
     if "model" not in context.user_data:
         context.user_data["model"] = "gpt-35-turbo"
-    
+
     model_names = [model_info["name"] for model_info in models.values()]
-    
+
     update.message.reply_text(
         f"Hello {update.effective_user.first_name}! I'm a bot powered by ChatGPT. Send me a message and I'll respond.\n\n"
         "*Available commands:*\n"
@@ -177,7 +187,8 @@ def set_model(update: Update, context: CallbackContext):
     if model_key:
         old_model = context.user_data.get("model", "gpt-35-turbo")
         context.user_data["model"] = model_key
-        logger.info(f"User {update.effective_user.id} changed model from {old_model} to {model_key}")
+        logger.info(
+            f"User {update.effective_user.id} changed model from {old_model} to {model_key}")
         update.message.reply_text(
             f"✅ Model changed to *{models[model_key]['name']}*\n\n"
             f"*Approximate costs per 1K tokens:*\n"
@@ -203,32 +214,34 @@ def generate_image(update: Update, context: CallbackContext, size="1920x1080"):
             "Example: /generatehd A mountain landscape at sunset"
         )
         return
-        
+
     user_message = " ".join(context.args)
     user_id = update.effective_user.id
-    
+
     # Log the image request
     logger.info(f"User {user_id} requested to generate image: {user_message}")
-    
+
     # Check prompt length
     if len(user_message) > 1000:
-        update.message.reply_text("The description is too long. Please limit it to 1000 characters.")
+        update.message.reply_text(
+            "The description is too long. Please limit it to 1000 characters.")
         return
-    
+
     # Wait message with emoji for better UX
-    wait_message = update.message.reply_text("🎨 Generating image... Please wait.")
-    
+    wait_message = update.message.reply_text(
+        "🎨 Generating image... Please wait.")
+
     try:
         # Increment usage counter (estimation for images)
         user_token_usage[user_id] += 500
-        
+
         response = openai.Image.create(
             prompt=user_message,
             n=1,
             size=size
         )
         image_url = response['data'][0]['url']
-        
+
         # Save the request in history
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         user_conversations[user_id].append({
@@ -237,7 +250,7 @@ def generate_image(update: Update, context: CallbackContext, size="1920x1080"):
             "url": image_url,
             "timestamp": timestamp
         })
-        
+
         # Delete wait message and send the image
         wait_message.delete()
         update.message.reply_text(
@@ -246,13 +259,14 @@ def generate_image(update: Update, context: CallbackContext, size="1920x1080"):
             f"[View image]({image_url})",
             parse_mode=ParseMode.MARKDOWN
         )
-        
+
         logger.info(f"Image generated successfully for user {user_id}")
     except Exception as e:
         wait_message.delete()
         error_message = str(e)
-        logger.error(f"Error generating image for user {user_id}: {error_message}")
-        
+        logger.error(
+            f"Error generating image for user {user_id}: {error_message}")
+
         # More detailed error message
         if "content policy violation" in error_message.lower():
             update.message.reply_text(
@@ -271,29 +285,32 @@ def generate_image(update: Update, context: CallbackContext, size="1920x1080"):
 def chat(update: Update, context: CallbackContext):
     user_id = update.effective_user.id
     user_message = update.message.text
-    model_key = context.user_data.get("model", "gpt-35-turbo")  # Modelo predeterminado
-    
+    model_key = context.user_data.get(
+        "model", "gpt-35-turbo")  # Modelo predeterminado
+
     # Inicializar la conversación si no existe
     if "messages" not in context.user_data:
         context.user_data["messages"] = []
-    
+
     # Añadir el mensaje del usuario al historial
-    context.user_data["messages"].append({"role": "user", "content": user_message})
-    
+    context.user_data["messages"].append(
+        {"role": "user", "content": user_message})
+
     # Limitar el número de mensajes para evitar tokens excesivos (mantener contexto reciente)
     if len(context.user_data["messages"]) > 20:  # Ajustar según necesidades
         context.user_data["messages"] = context.user_data["messages"][-20:]
-    
+
     # Mensaje de espera con indicador de escritura
-    wait_message = update.message.reply_text("💭 Pensando...")  
-    
+    wait_message = update.message.reply_text("💭 Pensando...")
+
     try:
         # Preparar mensajes para la API incluyendo el historial de conversación
         messages = context.user_data["messages"]
-        
+
         # Estimar tokens de entrada (aproximado)
-        input_tokens = sum(len(msg["content"]) // 4 for msg in messages)  # ~4 caracteres por token
-        
+        # ~4 caracteres por token
+        input_tokens = sum(len(msg["content"]) // 4 for msg in messages)
+
         # Verificar límite de tokens
         if user_token_usage[user_id] + input_tokens > MAX_TOKENS_PER_USER:
             wait_message.delete()
@@ -301,30 +318,33 @@ def chat(update: Update, context: CallbackContext):
                 "Has alcanzado tu límite de uso. Por favor, intenta más tarde o contacta al administrador."
             )
             return
-        
+
         # Incrementar contador de tokens (estimación)
         user_token_usage[user_id] += input_tokens
-        
+
         # Llamar a la API
         response = openai.ChatCompletion.create(
             model=model_key,
             messages=messages
         )
-        
+
         # Extraer respuesta
         bot_reply = response["choices"][0]["message"]["content"]
-        
+
         # Estimar tokens de salida y actualizar contador
         output_tokens = len(bot_reply) // 4  # ~4 caracteres por token
         user_token_usage[user_id] += output_tokens
-        
+
         # Registrar uso total
-        total_tokens = response.get("usage", {}).get("total_tokens", input_tokens + output_tokens)
-        logger.info(f"Usuario {user_id} usó {total_tokens} tokens con modelo {model_key}")
-        
+        total_tokens = response.get("usage", {}).get(
+            "total_tokens", input_tokens + output_tokens)
+        logger.info(
+            f"Usuario {user_id} usó {total_tokens} tokens con modelo {model_key}")
+
         # Añadir respuesta al historial
-        context.user_data["messages"].append({"role": "assistant", "content": bot_reply})
-        
+        context.user_data["messages"].append(
+            {"role": "assistant", "content": bot_reply})
+
         # Guardar en el historial general
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         user_conversations[user_id].append({
@@ -335,16 +355,17 @@ def chat(update: Update, context: CallbackContext):
             "tokens": total_tokens,
             "timestamp": timestamp
         })
-        
+
         # Eliminar mensaje de espera y enviar respuesta
         wait_message.delete()
         update.message.reply_text(bot_reply)
-        
+
     except Exception as e:
         wait_message.delete()
         error_message = str(e)
-        logger.error(f"Error al generar la respuesta para usuario {user_id}: {error_message}")
-        
+        logger.error(
+            f"Error al generar la respuesta para usuario {user_id}: {error_message}")
+
         # Mensaje de error más detallado
         if "maximum context length" in error_message.lower():
             # Reiniciar contexto si es demasiado largo
@@ -366,16 +387,18 @@ def show_usage(update: Update, context: CallbackContext):
     user_id = update.effective_user.id
     tokens_used = user_token_usage[user_id]
     percentage = (tokens_used / MAX_TOKENS_PER_USER) * 100
-    
+
     # Obtener el modelo actual
     model_key = context.user_data.get("model", "gpt-35-turbo")
     model_info = models[model_key]
-    
+
     # Calcular costo aproximado
-    input_cost = (tokens_used / 2) * (model_info["input_cost"] / 1000)  # Asumiendo que la mitad son tokens de entrada
-    output_cost = (tokens_used / 2) * (model_info["output_cost"] / 1000)  # Asumiendo que la mitad son tokens de salida
+    # Asumiendo que la mitad son tokens de entrada
+    input_cost = (tokens_used / 2) * (model_info["input_cost"] / 1000)
+    # Asumiendo que la mitad son tokens de salida
+    output_cost = (tokens_used / 2) * (model_info["output_cost"] / 1000)
     total_cost = input_cost + output_cost
-    
+
     update.message.reply_text(
         f"📊 *Estadísticas de uso*\n\n"
         f"*Tokens utilizados:* {tokens_used} de {MAX_TOKENS_PER_USER} ({percentage:.1f}%)\n"
@@ -387,10 +410,12 @@ def show_usage(update: Update, context: CallbackContext):
     )
 
 # Comando para reiniciar la conversación
+
+
 @track_usage
 def reset_conversation(update: Update, context: CallbackContext):
     user_id = update.effective_user.id
-    
+
     if "messages" in context.user_data:
         # Guardar la conversación antes de reiniciarla
         if context.user_data["messages"]:
@@ -400,15 +425,19 @@ def reset_conversation(update: Update, context: CallbackContext):
                 "messages": context.user_data["messages"].copy(),
                 "timestamp": timestamp
             })
-        
+
         # Reiniciar la conversación
         context.user_data["messages"] = []
         logger.info(f"Usuario {user_id} ha reiniciado su conversación")
-        update.message.reply_text("🔄 Conversación reiniciada. ¡Empecemos de nuevo!")
+        update.message.reply_text(
+            "🔄 Conversación reiniciada. ¡Empecemos de nuevo!")
     else:
-        update.message.reply_text("No hay una conversación activa para reiniciar.")
+        update.message.reply_text(
+            "No hay una conversación activa para reiniciar.")
 
 # Comando de ayuda detallada
+
+
 @track_usage
 def help_command(update: Update, context: CallbackContext):
     update.message.reply_text(
@@ -435,6 +464,8 @@ def help_command(update: Update, context: CallbackContext):
     )
 
 # Flask route for webhook
+
+
 @app.route(f'/{TELEGRAM_BOT_TOKEN}', methods=['POST'])
 def webhook():
     """Handle incoming updates from Telegram"""
@@ -442,51 +473,60 @@ def webhook():
     dispatcher.process_update(update)
     return 'ok'
 
+
 @app.route('/')
 def index():
     """Health check endpoint"""
     return 'Bot is running!'
 
+
 def setup_dispatcher():
     """Setup and return the dispatcher with all handlers"""
     dispatcher = Dispatcher(bot, None, workers=0)
-    
+
     # Register command handlers
     dispatcher.add_handler(CommandHandler("start", start))
     dispatcher.add_handler(CommandHandler("help", help_command))
-    dispatcher.add_handler(CommandHandler("setmodel", set_model, pass_args=True))
-    dispatcher.add_handler(CommandHandler("generatehd", generate_image, pass_args=True))
+    dispatcher.add_handler(CommandHandler(
+        "setmodel", set_model, pass_args=True))
+    dispatcher.add_handler(CommandHandler(
+        "generatehd", generate_image, pass_args=True))
     dispatcher.add_handler(CommandHandler("reset", reset_conversation))
     dispatcher.add_handler(CommandHandler("usage", show_usage))
-    dispatcher.add_handler(MessageHandler(Filters.text & ~Filters.command, chat))
-    
+    dispatcher.add_handler(MessageHandler(
+        Filters.text & ~Filters.command, chat))
+
     # Register error handler
-    dispatcher.add_error_handler(lambda update, context: logger.error(f"Error in update {update}: {context.error}"))
-    
+    dispatcher.add_error_handler(lambda update, context: logger.error(
+        f"Error in update {update}: {context.error}"))
+
     return dispatcher
+
 
 def main():
     # Verify that API keys are configured
     if not all([AZURE_OPENAI_API_KEY, AZURE_OPENAI_ENDPOINT, TELEGRAM_BOT_TOKEN]):
-        logger.critical("Missing required environment variables. Please configure the .env file")
-        print("ERROR: Missing required environment variables. Please configure the .env file")
+        logger.critical(
+            "Missing required environment variables. Please configure the .env file")
+        print(
+            "ERROR: Missing required environment variables. Please configure the .env file")
         return
-    
+
     global bot, dispatcher
-    
+
     try:
         logger.info("Starting the bot...")
         bot = Updater(TELEGRAM_BOT_TOKEN).bot
         dispatcher = setup_dispatcher()
-        
+
         # Choose between webhook (production) and polling (development)
         if IS_PRODUCTION and WEBHOOK_URL:
             # Production mode: use webhook
             logger.info(f"Starting webhook on port {PORT}")
-            
+
             # Set webhook
             bot.set_webhook(url=f"{WEBHOOK_URL}/{TELEGRAM_BOT_TOKEN}")
-            
+
             # Start Flask server
             logger.info("Bot started successfully in webhook mode")
             app.run(host='0.0.0.0', port=PORT)
@@ -495,7 +535,7 @@ def main():
             logger.info("Starting polling")
             updater = Updater(TELEGRAM_BOT_TOKEN)
             updater.dispatcher = dispatcher
-            
+
             # Start the Bot in polling mode
             logger.info("Bot started successfully in polling mode")
             print("Bot started successfully. Press Ctrl+C to stop.")
