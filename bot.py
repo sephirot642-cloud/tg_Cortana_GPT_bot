@@ -11,6 +11,7 @@ import sys
 import uuid
 import asyncio
 from datetime import datetime
+import pytz
 from collections import defaultdict, deque
 from functools import wraps
 
@@ -358,7 +359,9 @@ async def generate_image(update: Update, context: ContextTypes.DEFAULT_TYPE):
             response_cache[cache_key] = image_url
 
         # Save the request in history
-        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        # Cambia "UTC" por tu zona horaria si es necesario
+        timezone = pytz.timezone("Europe/Berlin")
+        timestamp = datetime.now(timezone).strftime("%Y-%m-%d %H:%M:%S")
         user_conversations[user_id].append({
             "type": "image",
             "prompt": user_message,
@@ -473,7 +476,9 @@ async def chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
             {"role": "assistant", "content": bot_reply})
 
         # Save in general history
-        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        # Cambia "UTC" por tu zona horaria si es necesario
+        timezone = pytz.timezone("Europe/Berlin")
+        timestamp = datetime.now(timezone).strftime("%Y-%m-%d %H:%M:%S")
         user_conversations[user_id].append({
             "type": "chat",
             "user_message": user_message,
@@ -552,7 +557,9 @@ async def reset_conversation(update: Update, context: ContextTypes.DEFAULT_TYPE)
     if "messages" in context.user_data:
         # Save the conversation before resetting it
         if context.user_data["messages"]:
-            timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            # Cambia "UTC" por tu zona horaria si es necesario
+            timezone = pytz.timezone("Europe/Berlin")
+            timestamp = datetime.now(timezone).strftime("%Y-%m-%d %H:%M:%S")
             user_conversations[user_id].append({
                 "type": "full_conversation",
                 "messages": context.user_data["messages"].copy(),
@@ -563,13 +570,15 @@ async def reset_conversation(update: Update, context: ContextTypes.DEFAULT_TYPE)
         context.user_data["messages"] = []
         logger.info(f"User {user_id} has reset their conversation")
         await update.message.reply_text(
-            "🔄 Conversation reset. Let's start fresh!")
+            "🔄 Conversation reset. Let's start fresh!"
+        )
 
         # Save updated user data
         save_user_data()
     else:
         await update.message.reply_text(
-            "There is no active conversation to reset.")
+            "There is no active conversation to reset."
+        )
 
 # Detailed help command
 
@@ -612,13 +621,9 @@ def create_flask_app(application):
         # Get the update from Telegram
         update_json = request.get_json(force=True)
 
-        # Process the update in an async context
-        async def process_update():
-            update = Update.de_json(update_json, application.bot)
-            await application.process_update(update)
-
-        # Run the async function
-        asyncio.run(process_update())
+        # Process the update asynchronously
+        asyncio.run(application.process_update(
+            Update.de_json(update_json, application.bot)))
         return 'ok'
 
     @app.route('/')
@@ -651,13 +656,19 @@ def create_app():
     if IS_PRODUCTION and WEBHOOK_URL:
         webhook_url = f"{WEBHOOK_URL}/{WEBHOOK_PATH}"
 
-        # This sets the webhook in an async context which is required
-        async def set_webhook():
-            await application.bot.set_webhook(url=webhook_url)
-            logger.info(f"Webhook set to {webhook_url}")
+        # This is a synchronous function to set the webhook
+        # We use it to avoid asyncio.run() inside the Flask app
+        def set_webhook():
+            import requests
+            api_url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/setWebhook"
+            response = requests.post(api_url, json={"url": webhook_url})
+            if response.status_code == 200:
+                logger.info(f"Webhook set to {webhook_url}")
+            else:
+                logger.error(f"Failed to set webhook: {response.text}")
 
-        # Run the async function to set webhook
-        asyncio.run(set_webhook())
+        # Set the webhook
+        set_webhook()
 
     # Create and return Flask app
     return create_flask_app(application)
@@ -681,17 +692,23 @@ async def run_polling():
     application.add_handler(MessageHandler(
         filters.TEXT & ~filters.COMMAND, chat))
 
-    # Remove webhook if previously set
-    await application.bot.delete_webhook()
-    logger.info("Webhook deleted, starting polling")
-
-    # Start the Bot using polling (this will block until Ctrl-C)
-    await application.run_polling(allowed_updates=Update.ALL_TYPES)
+    # Start the bot using polling
+    await application.initialize()
+    await application.start()
+    await application.run_polling()  # Cambiado de updater.start_polling()
 
 
 if __name__ == "__main__":
     try:
         logger.info("Starting the bot...")
+
+        try:
+            # Cambia aquí si es dinámico
+            timezone = pytz.timezone("Europe/Berlin")
+            print(f"Using timezone: {timezone}")
+        except Exception as e:
+            logger.critical(f"Invalid timezone: {e}")
+            sys.exit(1)
 
         # Choose between webhook (production) or polling (development)
         if IS_PRODUCTION and WEBHOOK_URL:
