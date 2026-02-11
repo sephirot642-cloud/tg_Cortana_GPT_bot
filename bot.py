@@ -96,6 +96,29 @@ class AzureDeployment(Enum):
     DALLE3 = "dall-e-3"
 
 
+class HealthCheckHandler(BaseHTTPRequestHandler):
+    """HTTP handler for Render.com health checks"""
+    
+    def do_GET(self):
+        """Handle GET requests for health check"""
+        self.send_response(200)
+        self.send_header('Content-type', 'text/plain')
+        self.end_headers()
+        self.wfile.write(b"Bot is running")
+    
+    def log_message(self, format, *args):
+        """Suppress HTTP server logs"""
+        pass
+
+
+def start_health_server():
+    """Start HTTP server for Render.com Web Service compatibility"""
+    port = int(os.getenv('PORT', 8080))
+    server = HTTPServer(('0.0.0.0', port), HealthCheckHandler)
+    logger.info(f"🌐 Health check server started on port {port}")
+    server.serve_forever()
+
+
 class ConversationManager:
     """Manages conversation history per user"""
     
@@ -284,6 +307,12 @@ def main():
     """Initialize and run the bot"""
     print("🚀 Bot starting...")
     logger.info("🚀 Starting Telegram bot with GPT-4o and DALL-E 3")
+    
+    # Start health check server for Render.com if in production
+    is_render = os.getenv('RENDER', 'false').lower() == 'true'
+    if is_render:
+        logger.info("🌐 Running on Render.com - starting health check server")
+        Thread(target=start_health_server, daemon=True).start()
     
     if ALLOWED_USERS:
         logger.info(f"🔒 Security mode: {len(ALLOWED_USERS)} authorized user(s)")
