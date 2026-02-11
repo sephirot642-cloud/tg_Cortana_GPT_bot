@@ -12,6 +12,17 @@ Modern Telegram bot with GPT-4o and DALL-E 3 integration, optimized for cloud de
 - 📝 **Structured Logging**: Complete activity monitoring
 - 🌐 **Cloud-Ready**: Ready for deployment on Render, Railway, etc.
 
+## Branch Strategy
+
+This repository uses different branches for different deployment platforms:
+
+- **`main`** - Clean base code for: Local development, VPS, Railway.app, and any standard environment
+- **`deploy/render`** - Render.com specific (includes HTTP health check server for Web Service compatibility)
+
+**Which branch to use:**
+- Render.com → Use `deploy/render` branch
+- Railway.app, VPS, Local → Use `main` branch
+
 ## Requirements
 
 - Python 3.10 or higher
