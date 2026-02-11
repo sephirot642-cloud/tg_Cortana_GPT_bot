@@ -1,114 +1,217 @@
-# Telegram Bot with ChatGPT and DALL-E
+# Telegram Bot with GPT-4o and DALL-E 3
 
-This Telegram bot integrates ChatGPT and DALL-E capabilities to provide AI-generated text and image responses.
+Modern Telegram bot with GPT-4o and DALL-E 3 integration, optimized for cloud deployment with async architecture and robust security measures.
 
 ## Features
 
-- 💬 **Chat with memory**: Maintains conversation context for more coherent responses
-- 🖼️ **Image generation**: Creates high-definition images with DALL-E 3
-- 🔄 **Multiple models**: Support for various OpenAI models (GPT-4, GPT-3.5, etc.)
-- 📊 **Usage control**: Tracks token usage per user
-- 🔒 **Configurable limits**: Set usage limits to control costs
-- 📝 **Detailed logging**: Complete activity logs for monitoring
-- 🔁 **Automatic retries**: Error handling with retries for increased robustness
+- 🤖 **GPT-4o with Function Calling**: Intelligent image generation through tools
+- 🎨 **DALL-E 3**: HD image creation based on descriptions
+- 💬 **Conversation Memory**: Maintains context for coherent responses
+- 🔒 **Access Control**: User whitelist for authorized access
+- ⚡ **Async Architecture**: AsyncAzureOpenAI for better performance
+- 📝 **Structured Logging**: Complete activity monitoring
+- 🌐 **Cloud-Ready**: Ready for deployment on Render, Railway, etc.
 
 ## Requirements
 
-- Python 3.7 or higher
-- An account with Azure OpenAI or OpenAI
-- A Telegram bot token (obtained via [@BotFather](https://t.me/BotFather))
+- Python 3.10 or higher
+- Azure OpenAI account with GPT-4o and DALL-E 3 access
+- Telegram bot token (get one from [@BotFather](https://t.me/BotFather))
+- Your Telegram user ID (get it from [@userinfobot](https://t.me/userinfobot))
 
 ## Installation
 
-### Local Installation
+### Local Setup
 
-1. Clone this repository or download the files
+1. **Clone the repository**
+   ```bash
+   git clone <your-repository>
+   cd tg_Cortana_GPT_bot
+   ```
 
-2. Install dependencies:
+2. **Create virtual environment**
+   ```bash
+   python -m venv venv
+   venv\Scripts\activate  # Windows
+   # or
+   source venv/bin/activate  # Linux/Mac
+   ```
 
-```bash
-pip install -r requirements.txt
-```
+3. **Install dependencies**
+   ```bash
+   pip install -r requirements.txt
+   ```
 
-3. Configure the `.env` file with your credentials:
+4. **Configure environment variables**
+   
+   Copy `.env.example` to `.env`:
+   ```bash
+   copy .env.example .env  # Windows
+   # or
+   cp .env.example .env  # Linux/Mac
+   ```
+   
+   Edit `.env` with your credentials:
+   ```env
+   AZURE_API_KEY=your_azure_key
+   AZURE_ENDPOINT=https://your-resource.openai.azure.com
+   AZURE_API_VERSION=2024-05-01-preview
+   TELEGRAM_BOT_TOKEN=your_telegram_token
+   ALLOWED_USERS=123456789,987654321
+   ```
 
-```
-AZURE_OPENAI_API_KEY=your_api_key_here
-AZURE_OPENAI_ENDPOINT=your_endpoint_here
-TELEGRAM_BOT_TOKEN=your_telegram_token_here
+5. **Run the bot**
+   ```bash
+   python bot.py
+   ```
 
-# Optional configuration
-MAX_TOKENS_PER_USER=1000
-MAX_CONVERSATIONS_STORED=10
-LOG_LEVEL=INFO
-```
+### Security Configuration
 
-### Deployment on Render.com
+**⚠️ IMPORTANT:** For production use, you **MUST** configure `ALLOWED_USERS`:
 
-1. Create an account on [Render.com](https://render.com) if you don't have one yet
+1. Get your Telegram ID from [@userinfobot](https://t.me/userinfobot)
+2. Add your ID (and other authorized users) to `ALLOWED_USERS` in `.env`
+3. Example: `ALLOWED_USERS=123456789,987654321`
 
-2. Click on "New" and select "Web Service"
+If `ALLOWED_USERS` is empty, **anyone** can use your bot (❌ **NOT RECOMMENDED** for production).
 
-3. Connect your GitHub repository or upload the files manually
+## Cloud Deployment
 
-4. Configure the service with the following parameters:
-   - **Name**: Your bot's name
-   - **Environment**: Python
-   - **Build Command**: `pip install -r requirements.txt`
-   - **Start Command**: `gunicorn bot:app`
+### Render.com
 
-5. In the "Environment Variables" section, add the following variables:
+1. Create account on [Render.com](https://render.com)
+2. Create new "Web Service"
+3. Connect your GitHub repository
+4. Configure environment variables in Render dashboard
+5. Start command: `python bot.py`
 
-```
-AZURE_OPENAI_API_KEY=your_api_key_here
-AZURE_OPENAI_ENDPOINT=your_endpoint_here
-TELEGRAM_BOT_TOKEN=your_telegram_token_here
-RENDER=true
-WEBHOOK_URL=https://your-app-name.onrender.com
-```
+### Railway.app
 
-6. Click on "Create Web Service"
+1. Create account on [Railway.app](https://railway.app)
+2. Create new project from GitHub
+3. Configure environment variables
+4. Railway auto-detects `requirements.txt`
 
-7. Once deployed, set up the Telegram webhook by visiting:
-   `https://api.telegram.org/bot<TELEGRAM_BOT_TOKEN>/setWebhook?url=https://your-app-name.onrender.com/<TELEGRAM_BOT_TOKEN>`
+### Polling Mode (Any Server)
 
-## Usage
-
-1. Start the bot:
+The bot runs in polling mode by default, which means **no webhook configuration needed**. Simply run:
 
 ```bash
 python bot.py
 ```
 
-2. Open Telegram and search for your bot by its username
+Works on any server, VPS, or local machine.
 
-3. Start a conversation with the `/start` command
+## Usage
 
-## Available Commands
+### Available Commands
 
-- `/start` - Starts the bot and shows the welcome message
-- `/help` - Shows a detailed help guide
-- `/setmodel <name>` - Changes the AI model to use
-- `/generatehd <description>` - Generates a high-definition image (1920x1080)
-- `/reset` - Resets the current conversation, removing the context
-- `/usage` - Shows your current usage statistics
+- `/start` - Show welcome message
+- `/clear` - Clear conversation memory
 
-## Customization
+### Examples
 
-You can modify the following parameters in the `.env` file:
+**Normal conversation:**
+```
+User: What is artificial intelligence?
+Bot: [Detailed GPT-4o response]
+```
 
-- `MAX_TOKENS_PER_USER`: Token limit per user
-- `MAX_CONVERSATIONS_STORED`: Maximum number of stored conversations
-- `LOG_LEVEL`: Log detail level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
+**Image generation (automatic via function calling):**
+```
+User: Generate an image of a cyberpunk cat in a futuristic city
+Bot: 🎨 Generating image: A cyberpunk cat in a futuristic city...
+Bot: [Sends generated image]
+```
+
+The bot automatically detects when to generate images thanks to GPT-4o Function Calling.
+
+## Configuration
+
+### Environment Variables
+
+| Variable | Description | Required | Example |
+|----------|-------------|----------|---------|
+| `TELEGRAM_BOT_TOKEN` | Telegram bot token | ✅ | `123456:ABC-DEF...` |
+| `AZURE_API_KEY` | Azure OpenAI API key | ✅ | `abc123...` |
+| `AZURE_ENDPOINT` | Azure OpenAI endpoint | ✅ | `https://....openai.azure.com` |
+| `AZURE_API_VERSION` | Azure OpenAI API version | ❌ | `2024-05-01-preview` |
+| `ALLOWED_USERS` | Authorized user IDs | ⚠️ Recommended | `123,456,789` |
+| `RENDER` | Production mode (Render.com) | ❌ | `true` or `false` |
+
+### Azure Deployments
+
+Ensure your Azure OpenAI deployments have these names:
+- **GPT-4o**: `gpt-4o`
+- **DALL-E 3**: `dall-e-3`
+
+If your deployments have different names, edit the `AzureDeployment` enum in `bot.py`:
+
+```python
+class AzureDeployment(Enum):
+    GPT4O = "your-gpt4o-deployment-name"
+    DALLE3 = "your-dalle3-deployment-name"
+```
 
 ## Troubleshooting
 
-- If the bot doesn't respond, check that the credentials in the `.env` file are correct
-- Check the logs in `bot.log` to identify possible errors
-- Make sure you have enough credits in your OpenAI account
-- For issues on Render.com, check the service logs in the Render dashboard
-- If the webhook doesn't work, ensure the URL is publicly accessible
+### Bot doesn't respond
+
+- ✅ Verify credentials in `.env` are correct
+- ✅ Ensure your ID is in `ALLOWED_USERS`
+- ✅ Check console logs for errors
+- ✅ Verify you have credits in Azure OpenAI account
+
+### API version error
+
+If you receive API version errors:
+- Verify your Azure OpenAI supports `2024-05-01-preview`
+- You can change the version in `bot.py` line 54
+
+### Bot doesn't generate images
+
+- ✅ Verify you have a DALL-E 3 deployment in Azure
+- ✅ Ensure deployment name is `dall-e-3`
+- ✅ Check logs for specific error
+
+### Access denied
+
+If you receive "⛔ You don't have permission to use this bot":
+- Your Telegram ID is not in `ALLOWED_USERS`
+- Get your ID from [@userinfobot](https://t.me/userinfobot)
+- Add it to `ALLOWED_USERS` in `.env`
+
+## Architecture
+
+```
+bot.py
+├── AsyncAzureOpenAI Client (async API)
+├── ConversationManager (history management)
+├── @restricted decorator (access control)
+├── Handlers
+│   ├── /start (welcome)
+│   ├── /clear (clear memory)
+│   └── chat_handler (messages + function calling)
+└── Tools Schema (DALL-E 3 integration)
+```
+
+## Security
+
+- ✅ User whitelist (`ALLOWED_USERS`)
+- ✅ Environment variable validation
+- ✅ Logging of unauthorized access attempts
+- ✅ No sensitive data stored on disk
+- ⚠️ For production, consider adding rate limiting
 
 ## License
 
 This project is available under the MIT license.
+
+## Contributing
+
+Contributions are welcome. Please:
+1. Fork the project
+2. Create a feature branch (`git checkout -b feature/AmazingFeature`)
+3. Commit your changes (`git commit -m 'Add some AmazingFeature'`)
+4. Push to the branch (`git push origin feature/AmazingFeature`)
+5. Open a Pull Request
