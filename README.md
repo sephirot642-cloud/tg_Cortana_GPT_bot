@@ -24,10 +24,6 @@ Modern Telegram bot with GPT-4o and DALL-E 3 integration, optimized for cloud de
 ### Local Setup
 
 1. **Clone the repository**
-   ```bash
-   git clone <your-repository>
-   cd tg_Cortana_GPT_bot
-   ```
 
 2. **Create virtual environment**
    ```bash
@@ -135,7 +131,7 @@ The bot automatically detects when to generate images thanks to GPT-4o Function 
 | `TELEGRAM_BOT_TOKEN` | Telegram bot token | ✅ | `123456:ABC-DEF...` |
 | `AZURE_API_KEY` | Azure OpenAI API key | ✅ | `abc123...` |
 | `AZURE_ENDPOINT` | Azure OpenAI endpoint | ✅ | `https://....openai.azure.com` |
-| `AZURE_API_VERSION` | Azure OpenAI API version | ❌ | `2024-05-01-preview` |
+| `AZURE_API_VERSION` | Azure OpenAI API version | ✅ | `2024-05-01-preview` |
 | `ALLOWED_USERS` | Authorized user IDs | ⚠️ Recommended | `123,456,789` |
 | `RENDER` | Production mode (Render.com) | ❌ | `true` or `false` |
 
